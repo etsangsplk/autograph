@@ -3,6 +3,7 @@ package xpi
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/base64"
@@ -67,7 +68,7 @@ func makeJARManifests(input []byte) (manifest, sigfile []byte, err error) {
 		return
 	}
 
-	// first generate the manifest file by calculating a sha1 and sha256 hash for each zip entry
+	// first generate the manifest file by calculating md5, sha1, and sha256 hashes for each zip entry
 	mw := bytes.NewBuffer(manifest)
 	manifest = []byte(fmt.Sprintf("Manifest-Version: 1.0\n\n"))
 
@@ -89,7 +90,10 @@ func makeJARManifests(input []byte) (manifest, sigfile []byte, err error) {
 		if err != nil {
 			return manifest, sigfile, err
 		}
-		fmt.Fprintf(mw, "Name: %s\nDigest-Algorithms: SHA1 SHA256\n", f.Name)
+		fmt.Fprintf(mw, "Name: %s\nDigest-Algorithms: MD5 SHA1 SHA256\n", f.Name)
+		h0 := md5.New()
+		h0.Write(data)
+		fmt.Fprintf(mw, "MD5-Digest: %s\n", base64.StdEncoding.EncodeToString(h0.Sum(nil)))
 		h1 := sha1.New()
 		h1.Write(data)
 		fmt.Fprintf(mw, "SHA1-Digest: %s\n", base64.StdEncoding.EncodeToString(h1.Sum(nil)))
@@ -103,6 +107,9 @@ func makeJARManifests(input []byte) (manifest, sigfile []byte, err error) {
 	// then calculate a signature file by hashing the manifest with sha1 and sha256
 	sw := bytes.NewBuffer(sigfile)
 	fmt.Fprint(sw, "Signature-Version: 1.0\n")
+	h0 := md5.New()
+	h0.Write(manifest)
+	fmt.Fprintf(sw, "MD5-Digest-Manifest: %s\n", base64.StdEncoding.EncodeToString(h0.Sum(nil)))
 	h1 := sha1.New()
 	h1.Write(manifest)
 	fmt.Fprintf(sw, "SHA1-Digest-Manifest: %s\n", base64.StdEncoding.EncodeToString(h1.Sum(nil)))
