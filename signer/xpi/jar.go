@@ -10,8 +10,55 @@ import (
 	"log"
 	"io"
 	"io/ioutil"
+	"path/filepath"
+	"sort"
 	"strings"
 )
+
+// getPriorityForFilename returns the priority for a filename
+//
+//     The filenames in a manifest are ordered so that files not in a
+//     directory come before files in any directory, ordered
+//     alphabetically but ignoring case, with a few exceptions
+//     (install.rdf, chrome.manifest, icon.png and icon64.png come at the
+//     beginning; licenses come at the end).
+//
+//     This order does not appear to affect anything in any way, but it
+//     looks nicer.
+func getPriorityForFilename(filename string) int {
+	switch filename {
+	case "install.rdf":
+		return 1
+	case "chrome.manifest", "icon.png", "icon64.png":
+		return 2
+	case "MPL", "GPL", "LGPL", "COPYING", "LICENSE", "license.txt":
+		return 5
+	default:
+		return 4
+	}
+}
+
+type byPriorityThenAlpha []*zip.File
+func (s byPriorityThenAlpha) Len() int {
+	return len(s)
+}
+func (s byPriorityThenAlpha) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+func (s byPriorityThenAlpha) Less(i, j int) bool {
+	iPriority, jPriority := getPriorityForFilename(s[i].Name), getPriorityForFilename(s[j].Name)
+	if iPriority != jPriority {
+		return iPriority < jPriority
+	}
+
+	iPath, iFile := filepath.Split(strings.ToLower(s[i].Name))
+	jPath, jFile := filepath.Split(strings.ToLower(s[j].Name))
+
+	if iPath != jPath {
+		return iPath < jPath
+	}
+	return iFile < jFile
+}
 
 func makeJARManifests(input []byte) (manifest, sigfile []byte, err error) {
 	inputReader := bytes.NewReader(input)
@@ -24,6 +71,7 @@ func makeJARManifests(input []byte) (manifest, sigfile []byte, err error) {
 	mw := bytes.NewBuffer(manifest)
 	manifest = []byte(fmt.Sprintf("Manifest-Version: 1.0\n\n"))
 
+	sort.Sort(byPriorityThenAlpha(r.File))
 	for _, f := range r.File {
 		if isSignatureFile(f.Name) {
 			// reserved signature files do not get included in the manifest
@@ -86,7 +134,24 @@ func repackJAR(input, manifest, sigfile, signature []byte) (output []byte, err e
 	// Create a new zip archive.
 	w := zip.NewWriter(buf)
 
+	// The PKCS7 file("foo.rsa") *MUST* be the first file in the
+	// archive to take advantage of Firefox's optimized downloading
+	// of XPIs
+	fwhead = &zip.FileHeader{
+		Name:   "META-INF/mozilla.rsa",
+		Method: zip.Deflate,
+	}
+	fw, err = w.CreateHeader(fwhead)
+	if err != nil {
+		return
+	}
+	_, err = fw.Write(signature)
+	if err != nil {
+		return
+	}
+
 	// Iterate through the files in the archive,
+	sort.Sort(byPriorityThenAlpha(r.File))
 	for _, f := range r.File {
 		// skip signature files, we have new ones we'll add at the end
 		if isSignatureFile(f.Name) {
@@ -115,7 +180,8 @@ func repackJAR(input, manifest, sigfile, signature []byte) (output []byte, err e
 		}
 		rc.Close()
 	}
-	// insert the signature files. Those will be compressed
+
+	// insert the remaining signature files. Those will be compressed
 	// so we don't have to worry about their alignment
 	var metas = []struct {
 		Name string
@@ -123,7 +189,6 @@ func repackJAR(input, manifest, sigfile, signature []byte) (output []byte, err e
 	}{
 		{"META-INF/manifest.mf", manifest},
 		{"META-INF/mozilla.sf", sigfile},
-		{"META-INF/mozilla.rsa", signature},
 	}
 	for _, meta := range metas {
 		fwhead = &zip.FileHeader{
