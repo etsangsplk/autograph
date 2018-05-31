@@ -55,7 +55,7 @@ func urlToRequestType(url string) requestType {
 	} else if strings.HasSuffix(url, "/sign/file") {
 		return requestTypeFile
 	} else {
-		panic(fmt.Sprintf("Unrecognized request type for url", url))
+		log.Fatalf("Unrecognized request type for url", url)
 	}
 }
 
