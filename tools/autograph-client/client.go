@@ -56,6 +56,7 @@ func urlToRequestType(url string) requestType {
 		return requestTypeFile
 	} else {
 		log.Fatalf("Unrecognized request type for url", url)
+		return
 	}
 }
 
