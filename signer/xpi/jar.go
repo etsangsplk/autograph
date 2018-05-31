@@ -194,4 +194,5 @@ func mustReadFileFromZIP(signedXPI []byte, filename string) (data []byte) {
 		}
 	}
 	log.Fatalf("failed to find %s in ZIP", filename)
+	return
 }
