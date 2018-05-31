@@ -284,7 +284,7 @@ func (sig *Signature) String() string {
 //
 // 1) the signed XPI includes a PKCS7 signature and signature data
 // 2) the signature serializes and deserializes properly
-// 3) the signature cert chain verifies (domain, expiration date, etc.)
+// 3) the signature cert chain verifies
 //
 func verifyPKCS7SignatureRoundTrip(signedFile signer.SignedFile) error {
 	var (
