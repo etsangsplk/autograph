@@ -135,7 +135,7 @@ func isValidCOSEMessage(msg cose.SignMessage) (intermediateCerts, eeCerts []*x50
 		resultErr = fmt.Errorf("Expected SignMessage Protected headers must contain one value, but got %d", len(msg.Headers.Protected))
 		return
 	}
-	kidValue, ok := msg.Headers.Protected[4] // 4 is the compressed key for "kid"
+	kidValue, ok := msg.Headers.Protected[kidHeaderValue]
 	if !ok {
 		resultErr = fmt.Errorf("Expected SignMessage must have kid in Protected Headers")
 		return
